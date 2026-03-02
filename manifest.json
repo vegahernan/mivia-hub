@@ -1,7 +1,7 @@
 {
-  "name": "La Escondida - Menú Digital",
-  "short_name": "La Escondida",
-  "description": "Menú digital de La Escondida - Parrilla de Autor",
+  "name": "MiviA-HUB - Menú Digital",
+  "short_name": "MiviA-HUB",
+  "description": "Menú digital para restaurantes",
   "start_url": "./menu.html",
   "display": "standalone",
   "background_color": "#0d0905",
@@ -9,13 +9,13 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "images/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "icon-512.png",
+      "src": "images/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
