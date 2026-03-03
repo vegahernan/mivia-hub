@@ -23,7 +23,8 @@
   // Inicializar app y Firestore
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
-  const FIRESTORE_MENU_DOC = db.collection('menus').doc('principal');
+  const CLIENT_ID = new URLSearchParams(location.search).get('cliente');
+  const FIRESTORE_MENU_DOC = CLIENT_ID ? db.collection('menus').doc(CLIENT_ID) : null;
 </script>
 <style>
 :root{--bg:#f0ebe2;--sf:#fff;--bd:#e2d9cc;--tx:#1a1510;--mu:#8a7d6c;--ac:#1a1510;--gd:#b8883a;--gb:#fef5e0;--gn:#2d6a4f;--gnb:#d8f3dc;--rd:#c62828;--rdb:#ffebee;--bl:#1565c0;--blb:#e3f2fd;--r:11px;--sh:0 2px 8px rgba(0,0,0,.07)}
@@ -389,7 +390,10 @@ input[type="checkbox"][id^="lang"]:disabled:checked {
 </head>
 <body>
 <div class="topbar">
-  <div class="brand">Menu<em>OS</em></div>
+  <div class="brand">
+    MiviA-HUB
+    <span id="clientIdLabel" style="font-size:11px;margin-left:8px;opacity:.8"></span>
+  </div>
   <div style="display:flex;gap:7px">
     <button class="tbtn tbtn-g" onclick="previewMenu()">👁 Ver</button>
     <button class="tbtn tbtn-gd" onclick="saveAll()">💾 Guardar</button>
@@ -2742,7 +2746,11 @@ function genQR(){
   const g = byId('qrGrid');
   g.innerHTML = '';
   for(let i = 1; i <= n; i++){
-    const url = base + '?mesa=' + i;
+    const hasQuery = base.includes('?');
+    const params = [];
+    if (CLIENT_ID) params.push('cliente=' + encodeURIComponent(CLIENT_ID));
+    params.push('mesa=' + i);
+    const url = base + (hasQuery ? '&' : '?') + params.join('&');
     const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(url) + '&bgcolor=ffffff&color=000000&margin=10';
     const d = document.createElement('div');
     d.className = 'qri';
@@ -2850,7 +2858,15 @@ function exportJSON(showToast=true){
   URL.revokeObjectURL(a.href);
   if(showToast)toast('📄 menu-data.json descargado');
 }
-function previewMenu(){saveAll(false);window.open('menu.html?t='+Date.now(),'_blank')}
+function previewMenu(){
+  saveAll(false);
+  let url='menu.html';
+  const params=new URLSearchParams();
+  if(CLIENT_ID) params.set('cliente',CLIENT_ID);
+  params.set('t',Date.now());
+  url += '?'+params.toString();
+  window.open(url,'_blank');
+}
 
 // ══════════════════════════════════════════════
 // TOAST
@@ -2903,7 +2919,20 @@ async function uploadMedia(file, type = 'product') {
   });
 }
 
-init();
+function showClientIdBadge(){
+  const el=document.getElementById('clientIdLabel');
+  if(el && CLIENT_ID){
+    el.textContent='Cliente: '+CLIENT_ID;
+  }
+}
+
+showClientIdBadge();
+
+if(!CLIENT_ID){
+  document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#111;color:#fff;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;text-align:center;padding:24px"><div><div style="font-size:32px;margin-bottom:12px">🚫</div><div style="font-size:18px;font-weight:700;margin-bottom:6px">Acceso inválido</div><div style="font-size:14px;opacity:.8">Acceso inválido. Contactá a tu proveedor.</div></div></div>';
+}else{
+  init();
+}
 </script>
 <!-- Color Picker Popup -->
 <div class="cpopup" id="cpopup">
