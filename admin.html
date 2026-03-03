@@ -383,6 +383,18 @@ input[type="checkbox"][id^="lang"]:disabled:checked {
 .toast{position:fixed;bottom:calc(64px + env(safe-area-inset-bottom,0));left:9px;right:9px;background:var(--ac);color:#fff;padding:11px 14px;border-radius:10px;font-size:14px;font-weight:600;z-index:9999;transform:translateY(14px);opacity:0;transition:all .25s cubic-bezier(.32,.72,0,1);box-shadow:0 6px 20px rgba(0,0,0,.22);text-align:center;pointer-events:none}
 .toast.show{transform:translateY(0);opacity:1}
 
+/* Modal importación desde foto */
+.photo-imp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:8000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
+.photo-imp-modal{background:var(--sf);border-radius:var(--r);border:1px solid var(--bd);max-width:520px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.photo-imp-modal .phimp-head{padding:14px;border-bottom:1px solid var(--bd);font-weight:700;font-size:16px}
+.photo-imp-modal .phimp-body{padding:12px;overflow-y:auto;flex:1}
+.photo-imp-modal .phimp-cat{margin-bottom:14px}
+.photo-imp-modal .phimp-cat-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);margin-bottom:8px}
+.photo-imp-modal .phimp-row{display:grid;grid-template-columns:1fr 80px;gap:8px;align-items:center;margin-bottom:6px}
+.photo-imp-modal .phimp-row input{padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:14px}
+.photo-imp-modal .phimp-foot{padding:12px;border-top:1px solid var(--bd);display:flex;gap:8px}
+.photo-imp-modal .phimp-foot .btn{flex:1}
+
 .info{background:var(--gb);border:1px solid #f5d79e;border-radius:8px;padding:9px 12px;font-size:12px;color:#7a4a00;line-height:1.6;margin-bottom:10px}
 .info-b{background:var(--blb);border-color:#bbdefb;color:#0d47a1}
 .sep{height:1px;background:var(--bd);margin:11px 0}
@@ -450,6 +462,9 @@ input[type="checkbox"][id^="lang"]:disabled:checked {
     </div>
     <div class="imp-st" id="impSt"></div>
     <div class="pbar-w" id="pbarW"><div class="pbar" id="pbar" style="width:0%"></div></div>
+
+    <button type="button" class="btn btn-o" style="margin-top:12px" onclick="openPhotoImport()">📷 Importar desde foto de carta</button>
+    <input type="file" id="photoImportInput" accept="image/jpeg,image/png,image/webp" style="display:none">
   </div>
 
   <div id="impPrev" style="display:none">
@@ -1008,6 +1023,18 @@ Llama al camarero para realizar tu pedido" rows="3" style="resize:vertical"></te
 
 <div class="toast" id="toast"></div>
 
+<!-- Modal vista previa importación desde foto -->
+<div class="photo-imp-overlay" id="photoImpModal" style="display:none" onclick="if(event.target===this)closePhotoImpModal()">
+  <div class="photo-imp-modal" onclick="event.stopPropagation()">
+    <div class="phimp-head">Productos detectados desde la foto</div>
+    <div class="phimp-body" id="photoImpBody"></div>
+    <div class="phimp-foot">
+      <button type="button" class="btn btn-o" onclick="closePhotoImpModal()">Cancelar</button>
+      <button type="button" class="btn btn-ok" onclick="confirmPhotoImport()">✅ Confirmar e importar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══════════════════════════════════════════════
 // CONSTANTS
@@ -1077,6 +1104,10 @@ let S={
   products:[]
 };
 let importedData=null, editingId=null, curTags=[];
+
+// API key para importar carta desde foto (Anthropic).
+// Definida como constante configurable por el integrador.
+const ANTHROPIC_API_KEY = "";
 
 // ══════════════════════════════════════════════
 // INIT
@@ -2172,6 +2203,208 @@ function applyImp(){
 function cancelImp(){importedData=null;byId('impPrev').style.display='none';setImpSt('','');toast('Cancelado')}
 function setImpSt(type,msg){const el=byId('impSt');el.className='imp-st'+(type==='ok'?' ist-ok':type==='err'?' ist-err':type==='load'?' ist-load':'');el.innerHTML=msg}
 function setPb(p){byId('pbarW').style.display='block';byId('pbar').style.width=p+'%'}
+
+// ══════════════════════════════════════════════
+// IMPORTAR DESDE FOTO (Anthropic)
+// ══════════════════════════════════════════════
+let photoImportProducts = [];
+
+function openPhotoImport(){
+  const input = byId('photoImportInput');
+  if(!input) return;
+  input.value = '';
+  input.click();
+}
+
+function closePhotoImpModal(){
+  byId('photoImpModal').style.display = 'none';
+  photoImportProducts = [];
+}
+
+function confirmPhotoImport(){
+  const products = [];
+  const currency = (S.restaurant && S.restaurant.currency) || '$';
+  for(let i = 0; i < photoImportProducts.length; i++){
+    const nameEl = document.getElementById('photoName_'+i);
+    const priceEl = document.getElementById('photoPrice_'+i);
+    const catEl = document.getElementById('photoCat_'+i);
+    const name = nameEl ? nameEl.value.trim() : photoImportProducts[i].name;
+    let price = 0;
+    if(priceEl){
+      const raw = String(priceEl.value).replace(currency,'').replace(/\s/g,'').replace(/\./g,'').replace(',','.').replace(/[^\d.]/g,'');
+      price = parseFloat(raw) || 0;
+    } else {
+      price = photoImportProducts[i].price;
+    }
+    const cat = catEl ? catEl.value.trim() : photoImportProducts[i].cat;
+    if(!name) continue;
+    products.push({
+      id: photoImportProducts[i].id,
+      cat: cat || 'General',
+      name: name,
+      desc: photoImportProducts[i].desc || '',
+      descLong: photoImportProducts[i].descLong || photoImportProducts[i].desc || '',
+      price: price,
+      badge: null,
+      tags: [],
+      video: null,
+      img: null,
+      available: true,
+      order: i
+    });
+  }
+  if(products.length === 0){ toast('⚠️ No hay productos para importar'); return; }
+  importedData = { products: products, restCfg: null };
+  closePhotoImpModal();
+  applyImp();
+}
+
+function showPhotoImportPreview(products){
+  photoImportProducts = products;
+  const body = byId('photoImpBody');
+  const cats = [];
+  const byCat = {};
+  products.forEach(p => {
+    const c = p.cat || 'General';
+    if(!byCat[c]){ byCat[c] = []; cats.push(c); }
+    byCat[c].push(p);
+  });
+  let html = '';
+  let idx = 0;
+  cats.forEach(cat => {
+    html += '<div class="phimp-cat"><div class="phimp-cat-title">'+escapeHtml(cat)+'</div>';
+    byCat[cat].forEach(p => {
+      html += '<div class="phimp-row">';
+      html += '<input type="text" id="photoName_'+idx+'" value="'+escapeHtml(p.name)+'" placeholder="Nombre">';
+      html += '<input type="text" id="photoPrice_'+idx+'" value="'+((S.restaurant&&S.restaurant.currency)||'$')+p.price+'" placeholder="Precio">';
+      html += '</div>';
+      html += '<input type="hidden" id="photoCat_'+idx+'" value="'+escapeHtml(p.cat)+'">';
+      idx++;
+    });
+    html += '</div>';
+  });
+  body.innerHTML = html;
+  byId('photoImpModal').style.display = 'flex';
+}
+
+function escapeHtml(s){
+  if(s==null||s===undefined) return '';
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function extractJsonFromText(text){
+  const trimmed = text.trim();
+  const jsonMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const raw = jsonMatch ? jsonMatch[1].trim() : trimmed;
+  try { return JSON.parse(raw); } catch(e){}
+  try { return JSON.parse(trimmed); } catch(e){}
+  return null;
+}
+
+function anthropicExtractMenu(base64DataUrl){
+  const apiKey = typeof ANTHROPIC_API_KEY === 'string' ? ANTHROPIC_API_KEY.trim() : '';
+  if(!apiKey){
+    setImpSt('err','❌ Configurá ANTHROPIC_API_KEY en el script para usar importación por foto.');
+    return Promise.resolve(null);
+  }
+  const m = base64DataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  const mediaType = m ? m[1] : 'image/jpeg';
+  const base64 = m ? m[2] : base64DataUrl;
+
+  const systemPrompt = 'Eres un asistente que extrae información de cartas de restaurantes. Analiza la imagen y devuelve SOLO un JSON válido con este formato exacto, sin texto adicional:\n{"categorias":[{"nombre":"Nombre categoría","productos":[{"nombre":"Nombre producto","descripcion":"descripción corta o vacío","precio":000}]}]}\nSi no podés leer un precio, usá 0. Si no hay categorías claras, agregalos todos bajo "General".';
+
+  const body = {
+    model: 'claude-opus-4-5-20251101',
+    max_tokens: 2000,
+    system: systemPrompt,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+        { type: 'text', text: 'Extraé el menú de esta imagen y devolvé el JSON.' }
+      ]
+    }]
+  };
+
+  setImpSt('load','⏳ Analizando imagen con IA...');
+  return fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify(body)
+  })
+    .then(r => {
+      if(!r.ok) return r.text().then(t => { throw new Error(t || r.status); });
+      return r.json();
+    })
+    .then(data => {
+      const text = data.content && data.content[0] && data.content[0].text ? data.content[0].text : '';
+      const json = extractJsonFromText(text);
+      if(!json || !json.categorias || !Array.isArray(json.categorias)){
+        setImpSt('err','❌ No se pudo extraer un menú válido de la respuesta.');
+        return null;
+      }
+      const products = [];
+      let idBase = Date.now();
+      json.categorias.forEach((cat, ci) => {
+        const catName = cat.nombre || cat.nombre_categoria || 'General';
+        (cat.productos || []).forEach((prod, pi) => {
+          products.push({
+            id: idBase + ci * 100 + pi,
+            cat: catName,
+            name: prod.nombre || prod.name || 'Sin nombre',
+            desc: prod.descripcion || prod.desc || '',
+            descLong: prod.descripcion_larga || prod.descLong || prod.descripcion || '',
+            price: typeof prod.precio === 'number' ? prod.precio : (parseFloat(prod.precio) || 0),
+            badge: null,
+            tags: [],
+            video: null,
+            img: null,
+            available: true,
+            order: products.length
+          });
+        });
+      });
+      setImpSt('ok','✅ <b>'+products.length+' productos</b> detectados. Revisá y confirmá en el modal.');
+      return products;
+    })
+    .catch(err => {
+      console.error(err);
+      setImpSt('err','❌ Error al llamar a la API: ' + (err.message || 'revisá tu API key y conexión.'));
+      return null;
+    });
+}
+
+function handlePhotoImportFile(file){
+  if(!file || !file.type.match(/^image\/(jpeg|png|webp)$/)){
+    setImpSt('err','❌ Solo imágenes JPG, PNG o WEBP.');
+    return;
+  }
+  setImpSt('load','⏳ Cargando imagen...');
+  const reader = new FileReader();
+  reader.onload = function(){
+    const dataUrl = reader.result;
+    anthropicExtractMenu(dataUrl).then(products => {
+      if(products && products.length > 0) showPhotoImportPreview(products);
+    });
+  };
+  reader.onerror = function(){ setImpSt('err','❌ Error leyendo el archivo.'); };
+  reader.readAsDataURL(file);
+}
+
+(function(){
+  const el = document.getElementById('photoImportInput');
+  if(el) el.addEventListener('change', function(){
+    const f = this.files && this.files[0];
+    if(f) handlePhotoImportFile(f);
+    this.value = '';
+  });
+})();
 
 // ══════════════════════════════════════════════
 // DASHBOARD
