@@ -3085,7 +3085,7 @@ async function uploadMedia(file, type = 'product') {
     
     reader.onload = async (e) => {
       try {
-        const response = await fetch('/upload-media', {
+        const response = await fetch('/.netlify/functions/upload-media', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
